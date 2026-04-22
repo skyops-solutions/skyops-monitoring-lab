@@ -1,0 +1,58 @@
+grafana:
+  adminPassword: admin123
+  persistence:
+    enabled: false
+  service:
+    type: ClusterIP
+
+prometheus:
+  prometheusSpec:
+    # Збирати метрики з pods що мають анотацію prometheus.io/scrape: "true"
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    additionalScrapeConfigs:
+      - job_name: skyops-app
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [skyops]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: (.+):(?:\d+);(\d+)
+            replacement: $1:$2
+            target_label: __address__
+
+alertmanager:
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ["alertname", "severity"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      receiver: telegram
+    receivers:
+      - name: telegram
+        telegram_configs:
+          - bot_token: "8434058926:AAFkrXREWDUw2cA9VDYoygZ0WK4oPG8S6qk"
+            chat_id: 5330974469
+            parse_mode: HTML
+            message: |
+              {{ range .Alerts }}
+              <b>{{ .Labels.severity | toUpper }} — {{ .Labels.alertname }}</b>
+              {{ .Annotations.summary }}
+              {{ .Annotations.description }}
+              Status: {{ .Status }}
+              {{ end }}
+
+nodeExporter:
+  enabled: true
