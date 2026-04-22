@@ -1,0 +1,49 @@
+groups:
+  - name: app_alerts
+    rules:
+      - alert: AppDown
+        expr: up{job="app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SkyOps App is DOWN"
+          description: "The application has been unreachable for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: rate(http_request_duration_seconds_count{status=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP 5xx error rate"
+          description: "More than 10% of requests are returning 5xx errors."
+
+  - name: system_alerts
+    rules:
+      - alert: HighCPU
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage has been above 80% for 5 minutes on {{ $labels.instance }}."
+
+      - alert: HighMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage has been above 85% for 5 minutes on {{ $labels.instance }}."
+
+      - alert: DiskAlmostFull
+        expr: (1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) * 100 > 85
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk almost full"
+          description: "Disk usage is above 85% on {{ $labels.instance }}."
