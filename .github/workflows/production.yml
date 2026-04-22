@@ -22,6 +22,8 @@ jobs:
     name: Build & Push (latest + sha tag)
     runs-on: ubuntu-latest
     needs: test
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
