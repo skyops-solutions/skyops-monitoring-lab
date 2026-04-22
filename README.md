@@ -237,6 +237,95 @@ pytest tests/ -v
 
 ---
 
+## Kubernetes deployment
+
+Маніфести знаходяться в `k8s/`. Кластер: `docker-desktop`.
+
+### Передумови
+
+```bash
+# Встановити Helm репозиторії (один раз)
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+```
+
+### Розгорнути app
+
+```bash
+# Namespace + app маніфести
+kubectl apply -f k8s/namespace.yml
+kubectl apply -f k8s/app/
+
+# Перевірити стан (2 pods мають бути Running)
+kubectl get pods -n skyops
+```
+
+### Розгорнути monitoring в K8s
+
+```bash
+# Prometheus + Grafana + Alertmanager
+helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace \
+  -f k8s/monitoring/kube-prometheus-stack-values.yml
+
+# Loki
+helm install loki grafana/loki \
+  --namespace monitoring \
+  -f k8s/monitoring/loki-values.yml \
+  --set loki.useTestSchema=true
+```
+
+### Доступ до сервісів (port-forward)
+
+```bash
+# App
+kubectl port-forward -n skyops svc/skyops-app 8080:80
+# → http://localhost:8080/health
+
+# Grafana
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3001:80
+# → http://localhost:3001  (admin / admin123)
+
+# Prometheus
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9091:9090
+# → http://localhost:9091
+```
+
+### Структура k8s/
+
+```
+k8s/
+├── namespace.yml              # namespace: skyops
+├── app/
+│   ├── deployment.yml         # 2 replicas, readiness/liveness probes
+│   ├── service.yml            # ClusterIP :80 → pod :8000
+│   ├── ingress.yml            # nginx ingress, host: skyops.local
+│   └── hpa.yml                # автомасштабування: 2–5 pods при CPU>70%
+└── monitoring/
+    ├── kube-prometheus-stack-values.yml   # Prometheus + Grafana + Alertmanager
+    └── loki-values.yml                    # Loki single-binary mode
+```
+
+### Rollback в Kubernetes
+
+```bash
+# Переглянути історію деплоїв
+kubectl rollout history deployment/skyops-app -n skyops
+
+# Відкотитись на попередню версію
+kubectl rollout undo deployment/skyops-app -n skyops
+
+# Відкотитись на конкретну ревізію
+kubectl rollout undo deployment/skyops-app -n skyops --to-revision=2
+
+# Змінити образ вручну на конкретний тег
+kubectl set image deployment/skyops-app app=error404gg/skyops-monitoring-lab:<sha> -n skyops
+```
+
+---
+
 ## Корисні команди
 
 ```bash
@@ -255,5 +344,11 @@ docker compose pull app
 docker compose up -d app
 
 # Перевірити метрики вручну
-curl http://localhost:8000/metrics | grep http_request
+curl http://localhost/metrics | grep http_request
+
+# K8s — логи app
+kubectl logs -n skyops -l app=skyops-app -f
+
+# K8s — статус всіх ресурсів
+kubectl get all -n skyops
 ```
